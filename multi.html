@@ -6,9 +6,11 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <title>6561 — 2 Players</title>
 <style>
+  *,*::before,*::after{ box-sizing:border-box } /* <- prevents overflow drift */
+
   :root{
     --bg:#ffeaf1; --board:#f3c2d1; --empty:#f8d7e3; --text:#7a2a4a; --accent:#b14172;
-    --gap:14px; --pad:16px; --cell:100px; --gridW:360px; --anim:140ms;
+    --gap:14px; --pad:16px; --anim:150ms;
   }
 
   html,body{height:100%}
@@ -46,17 +48,35 @@
   .power[disabled]{opacity:.45; cursor:not-allowed}
   .power.active{outline:3px solid #b14172; outline-offset:2px}
 
-  .board{ position:relative; background:var(--board); border-radius:16px; padding:var(--pad); box-shadow:0 8px 0 rgba(0,0,0,.06) inset; }
-  .grid{ position:relative; width:var(--gridW); height:var(--gridW);
-         display:grid; grid-template-columns:repeat(3,var(--cell)); grid-template-rows:repeat(3,var(--cell)); gap:var(--gap); margin:0 auto;}
-  .cell{ background:var(--empty); border-radius:12px; }
-  .layer{ position:absolute; width:var(--gridW); height:var(--gridW); pointer-events:none; }
+  .board{
+    position:relative; background:var(--board); border-radius:16px; padding:var(--pad);
+    box-shadow:0 8px 0 rgba(0,0,0,.06) inset;
+    min-height: 0; /* avoid rounding push */
+  }
 
-  .tile{ position:absolute; width:var(--cell); height:var(--cell); border-radius:12px;
-    display:flex; align-items:center; justify-content:center; font-weight:800; font-size:28px;
+  /* Grid background: width/height set in JS; centered with margins only */
+  .grid{
+    position:relative;
+    display:grid; grid-template-columns:repeat(3,var(--cell)); grid-template-rows:repeat(3,var(--cell));
+    gap:var(--gap);
+    margin:0 auto;      /* center horizontally */
+  }
+  .cell{ background:var(--empty); border-radius:12px; }
+
+  /* Tiles layer: absolutely aligned to SAME top/left as the grid */
+  .layer{
+    position:absolute;
+    pointer-events:none;
+  }
+
+  .tile{
+    position:absolute; width:var(--cell); height:var(--cell); border-radius:12px;
+    display:flex; align-items:center; justify-content:center; font-weight:800; font-size:var(--tileFont,28px);
     will-change:transform;
     transition:transform var(--anim) ease, background-color var(--anim) ease, color var(--anim) ease;
-    box-shadow:0 10px 24px rgba(0,0,0,.08); user-select:none; pointer-events:auto;}
+    box-shadow:0 10px 24px rgba(0,0,0,.08);
+    user-select:none; pointer-events:auto;
+  }
   .tile.new{animation:pop 140ms ease-out}
   .tile.merge{animation:bump 140ms ease-out}
   @keyframes pop{from{transform:scale(.6)} to{transform:scale(1)}}
@@ -67,7 +87,7 @@
   .v27{background:#ffadc7;color:#691c3c;}
   .v81{background:#ff94b7;color:#631837;}
   .v243{background:#ff7aa6;color:#5b1431;}
-  .v729{background:#000;color:#fff;font-size:26px;}
+  .v729{background:#000;color:#fff;}
 
   .btn{ background:#b14172; color:#fff; border:none; border-radius:10px; padding:9px 12px; font-weight:700; cursor:pointer; box-shadow:0 4px 14px rgba(177,65,114,.22); }
   .btn:active{transform:translateY(1px)}
@@ -78,11 +98,10 @@
   .card p{margin:6px 0 10px; color:#444}
   .close{position:absolute; right:10px; top:10px; border:none; background:#eee; border-radius:999px; width:34px; height:34px; font-weight:700; cursor:pointer}
 
-  /* Legends */
   .legend{font-size:12px; color:#7a2a4a; opacity:.9; margin-top:8px}
   .legend kbd{background:#ffd1e0; border-radius:6px; padding:2px 6px; font-weight:800; font-family:inherit}
 
-  /* Countdown overlay */
+  /* Countdown */
   #countdown{ position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:6; }
   #countdown .bubble{
     width:170px; height:170px; border-radius:999px; background:#fff; display:flex; align-items:center; justify-content:center;
@@ -119,14 +138,10 @@
           <button class="power" id="p1-hammer">🪓 Hammer (1)</button>
         </div>
         <div class="board">
-          <div class="grid" id="p1-grid">
-            <div class="cell"></div><div class="cell"></div><div class="cell"></div>
-            <div class="cell"></div><div class="cell"></div><div class="cell"></div>
-            <div class="cell"></div><div class="cell"></div><div class="cell"></div>
-          </div>
+          <div class="grid" id="p1-grid"></div>
           <div class="layer" id="p1-layer"></div>
         </div>
-        <div class="legend">Move with <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> · Use power-up buttons above</div>
+        <div class="legend">Move with <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> · Use power-ups above</div>
       </section>
 
       <!-- Player 2 -->
@@ -141,14 +156,10 @@
           <button class="power" id="p2-hammer">🪓 Hammer (1)</button>
         </div>
         <div class="board">
-          <div class="grid" id="p2-grid">
-            <div class="cell"></div><div class="cell"></div><div class="cell"></div>
-            <div class="cell"></div><div class="cell"></div><div class="cell"></div>
-            <div class="cell"></div><div class="cell"></div><div class="cell"></div>
-          </div>
+          <div class="grid" id="p2-grid"></div>
           <div class="layer" id="p2-layer"></div>
         </div>
-        <div class="legend">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Use power-up buttons above</div>
+        <div class="legend">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Use power-ups above</div>
       </section>
     </div>
   </div>
@@ -185,36 +196,44 @@
   </div>
 
 <script>
-/* ===== Shared config ===== */
+/* ===== Config ===== */
 const SIZE=3, WIN_TILE=729, MERGE=3;
 const SPAWN=[3,3,3,3,3,3,3,3,3,9]; // 90% 3, 10% 9
-const ANIM=150, LOCK=155;
-
-/* Match-level input lock (disabled until countdown ends) */
+const ANIM=150, LOCK=160;
 let matchLocked = true;
 
+/* Helpers */
 const uid=()=>Math.random().toString(36).slice(2);
 const valClass=v=>`v${v}`;
 const key=(r,c)=>`${r},${c}`;
 
-/* ===== Game class (per player) ===== */
+/* Build 3x3 background cells once */
+function buildCells(gridEl){
+  gridEl.innerHTML='';
+  for(let i=0;i<9;i++){
+    const d=document.createElement('div'); d.className='cell'; gridEl.appendChild(d);
+  }
+}
+
+/* ===== Game (per player) ===== */
 class TriGame{
   constructor(rootId,label){
-    this.label=label;                    // 'P1' or 'P2'
+    this.label=label;
     this.root=document.getElementById(rootId);
     this.gridEl=this.root.querySelector('.grid');
     this.layerEl=this.root.querySelector('.layer');
+    this.boardEl=this.root.querySelector('.board');
     this.scoreEl=document.getElementById(`${label.toLowerCase()}-score`);
     this.undoBtn=document.getElementById(`${label.toLowerCase()}-undo`);
     this.shuffleBtn=document.getElementById(`${label.toLowerCase()}-shuffle`);
     this.hammerBtn=document.getElementById(`${label.toLowerCase()}-hammer`);
-    this.boardEl=this.root.querySelector('.board');  // search inside panel
-    if(!this.boardEl){ console.error(`[${this.label}] board not found`); return; }
+
+    buildCells(this.gridEl);
 
     this.pad=16; this.gap=14; this.cell=100;
-    this.geom={pos:[]};
-    this.tiles=new Map();      // id → {r,c,val,el}
-    this.tilesByCell=new Map();// "r,c" → id
+    this.geom={pos:[], offsetX:0, offsetY:0};
+    this.tiles=new Map();      // id -> {r,c,val,el}
+    this.byCell=new Map();     // "r,c" -> id
     this.history=[];
     this.score=0; this.locked=false;
     this.powers={undo:1, shuffle:1, hammer:1, hammerActive:false};
@@ -223,118 +242,130 @@ class TriGame{
     this.computeGeom();
     new ResizeObserver(()=>{ this.computeGeom(); this.layoutAll(); }).observe(this.boardEl);
     this.reset();
-    this.setEnabled(!matchLocked); // reflect match lock on UI
+    this.setEnabled(!matchLocked);
   }
 
   computeGeom(){
     const st=getComputedStyle(document.documentElement);
     const pad=parseInt(st.getPropertyValue('--pad'))||16;
     const gap=parseInt(st.getPropertyValue('--gap'))||14;
-    const bw=this.boardEl.clientWidth, inner=bw-pad*2;
-    const cell=Math.floor((inner-gap*(SIZE-1))/SIZE);
-    const gridW = cell*SIZE + gap*(SIZE-1);
-    const off = Math.floor((inner-gridW)/2);
 
-    [this.gridEl,this.layerEl].forEach(el=>{
-      el.style.width = gridW+'px';
-      el.style.height= gridW+'px';
-      el.style.left  = pad+off+'px';
-      el.style.top   = pad+off+'px';
-    });
+    const bw=this.boardEl.clientWidth;
+    const inner=bw - pad*2;
+    const cell=Math.floor((inner - gap*(SIZE-1))/SIZE);
+    const gridW=cell*SIZE + gap*(SIZE-1);
+    const off=Math.floor((inner-gridW)/2);
 
-    const pos = Array.from({length:SIZE},(_,r)=>Array.from({length:SIZE},(_,c)=>({
-      x: Math.round((cell+gap)*c), y: Math.round((cell+gap)*r)
-    })));
+    /* Set sizes on the background grid (center with margins) */
+    this.gridEl.style.width = gridW+'px';
+    this.gridEl.style.height= gridW+'px';
+    this.gridEl.style.marginLeft = 'auto';
+    this.gridEl.style.marginRight= 'auto';
 
-    this.pad=pad; this.gap=gap; this.cell=cell; this.geom={pos};
+    /* Position tile layer to same offset inside board */
+    this.layerEl.style.width = gridW+'px';
+    this.layerEl.style.height= gridW+'px';
+    this.layerEl.style.left = (pad+off)+'px';
+    this.layerEl.style.top  = (pad+off)+'px';
+
+    /* Compute integer positions for each cell */
+    const pos = Array.from({length:SIZE},(_,r)=>Array.from({length:SIZE},(_,c)=>{
+      return {x: Math.round((cell+gap)*c), y: Math.round((cell+gap)*r)};
+    }));
+
+    /* Dynamic font so numbers fit perfectly */
+    const tileFontPx = Math.max(18, Math.floor(cell*0.45));
+    this.layerEl.style.setProperty('--cell', cell+'px');
+    this.layerEl.style.setProperty('--tileFont', tileFontPx+'px');
+    this.gridEl.style.setProperty('--cell', cell+'px');
+
+    this.pad=pad; this.gap=gap; this.cell=cell; this.geom={pos, offsetX:pad+off, offsetY:pad+off};
   }
 
-  /* ---- Enable/disable inputs & buttons for match lock ---- */
   setEnabled(on){
-    const disable = (btn, d) => { btn.disabled = d; btn.classList.toggle('active', !d && btn.classList.contains('active')); };
-    disable(this.undoBtn, !on || this.powers.undo<=0);
-    disable(this.shuffleBtn, !on || this.powers.shuffle<=0);
-    disable(this.hammerBtn, !on || this.powers.hammer<=0);
+    const set=(btn, ok)=>{ btn.disabled=!ok; };
+    set(this.undoBtn, on && this.powers.undo>0);
+    set(this.shuffleBtn, on && this.powers.shuffle>0);
+    set(this.hammerBtn, on && this.powers.hammer>0);
   }
 
-  /* ---- Power-ups ---- */
   bindPowers(){
     const refresh=()=>this.updatePowersUI();
 
-    this.undoBtn.addEventListener('click',()=>{
+    this.undoBtn.onclick=()=>{
       if(matchLocked || this.powers.undo<=0 || this.locked) return;
-      if(this.restoreFromHistory()){
-        this.powers.undo--; refresh(); this.setEnabled(true);
-      }
-    });
+      if(this.restore()){ this.powers.undo--; refresh(); this.setEnabled(true); }
+    };
 
-    this.shuffleBtn.addEventListener('click',()=>{
+    this.shuffleBtn.onclick=()=>{
       if(matchLocked || this.powers.shuffle<=0 || this.locked) return;
-      this.pushHistory();
+      this.push();
       const vals=[...this.tiles.values()].map(t=>t.val);
-      // clear
-      this.layerEl.innerHTML=''; this.tiles.clear(); this.tilesByCell.clear();
+      this.tiles.forEach(t=>t.el.remove()); this.tiles.clear(); this.byCell.clear();
       this.grid = Array.from({length:SIZE},()=>Array(SIZE).fill(0));
-      // re-place randomly
       for(const v of vals.sort(()=>Math.random()-0.5)){
-        const s=this.randomEmpty(); if(!s) break;
-        const [r,c]=s; this.grid[r][c]=v; this.createTile(r,c,v,true);
+        const s=this.empty(); if(!s) break;
+        const [r,c]=s; this.grid[r][c]=v; this.makeTile(r,c,v,true);
       }
       this.layoutAll();
       this.powers.shuffle--; refresh(); this.setEnabled(true);
-    });
+    };
 
-    this.hammerBtn.addEventListener('click',()=>{
+    this.hammerBtn.onclick=()=>{
       if(matchLocked || this.powers.hammer<=0) return;
-      this.powers.hammerActive = !this.powers.hammerActive;
+      this.powers.hammerActive=!this.powers.hammerActive;
       refresh();
-    });
+    };
   }
 
   updatePowersUI(){
     const set=(btn,label,count,active=false)=>{
-      btn.textContent = `${label} (${count})`;
-      btn.disabled = matchLocked || count<=0;
+      btn.textContent=`${label} (${count})`;
       btn.classList.toggle('active', active && !matchLocked);
+      btn.disabled = matchLocked || count<=0;
     };
     set(this.undoBtn,'↩︎ Undo',this.powers.undo);
     set(this.shuffleBtn,'🔀 Shuffle',this.powers.shuffle);
     set(this.hammerBtn,'🪓 Hammer',this.powers.hammer,this.powers.hammerActive);
   }
 
-  /* ---- Core helpers ---- */
-  randomEmpty(){
-    const e=[]; for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(!this.grid[r][c]) e.push([r,c]);
-    return e.length? e[(Math.random()*e.length)|0] : null;
+  reset(){
+    this.locked=false;
+    this.grid=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+    this.score=0; this.scoreEl.textContent=0;
+    this.layerEl.innerHTML=''; this.tiles.clear(); this.byCell.clear(); this.history=[];
+    this.powers={undo:1, shuffle:1, hammer:1, hammerActive:false}; this.updatePowersUI();
+    this.spawn(); this.spawn(); this.layoutAll();
   }
-  createTile(r,c,val,noPop=false){
+
+  empty(){ const e=[]; for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(!this.grid[r][c]) e.push([r,c]); return e.length? e[(Math.random()*e.length)|0]:null; }
+
+  makeTile(r,c,val,noPop=false){
     const id=uid();
     const el=document.createElement('div');
     el.className=`tile ${noPop?'':'new'} ${valClass(val)}`;
     el.textContent=val;
     const {x,y}=this.geom.pos[r][c];
-    el.style.transform=`translate3d(${x}px,${y}px,0)`;
+    el.style.transform=`translate3d(${x}px,${y}px,0)`; /* integer positions only */
     this.layerEl.appendChild(el);
 
     const t={id,r,c,val,el};
-    this.tiles.set(id,t);
-    this.tilesByCell.set(key(r,c), id);
+    this.tiles.set(id,t); this.byCell.set(key(r,c),id);
 
-    // Hammer: delete on click
-    el.addEventListener('click', ()=>{
-      if(matchLocked || this.powers.hammerActive===false || this.powers.hammer<=0 || this.locked) return;
-      this.pushHistory();
-      this.grid[r][c]=0; this.deleteAt(r,c);
+    el.onclick=()=>{
+      if(matchLocked || !this.powers.hammerActive || this.powers.hammer<=0 || this.locked) return;
+      this.push(); this.grid[r][c]=0; this.removeAt(r,c);
       this.powers.hammerActive=false; this.powers.hammer--; this.updatePowersUI(); this.setEnabled(true);
       setTimeout(()=>{ this.spawn(); if(this.isWin()) announceWinner(this.label); }, ANIM);
-    });
+    };
   }
-  deleteAt(r,c){
-    const id=this.tilesByCell.get(key(r,c)); if(!id) return;
-    this.tilesByCell.delete(key(r,c));
-    const t=this.tiles.get(id);
-    if(t){ t.el.remove(); this.tiles.delete(id); }
+
+  removeAt(r,c){
+    const id=this.byCell.get(key(r,c)); if(!id) return;
+    this.byCell.delete(key(r,c));
+    const t=this.tiles.get(id); if(t){ t.el.remove(); this.tiles.delete(id); }
   }
+
   layoutAll(){
     requestAnimationFrame(()=>{
       for(const t of this.tiles.values()){
@@ -343,77 +374,49 @@ class TriGame{
       }
     });
   }
-  setTileValue(t,val){
-    t.val=val;
-    t.el.className=`tile ${valClass(val)}`;
-    t.el.textContent=val;
+
+  push(){ this.history.push({g:this.grid.map(r=>r.slice()), s:this.score, tiles:[...this.tiles.values()].map(t=>({r:t.r,c:t.c,v:t.val}))}); if(this.history.length>20)this.history.shift(); }
+  restore(){
+    const s=this.history.pop(); if(!s) return false;
+    this.grid=s.g.map(r=>r.slice()); this.score=s.s; this.scoreEl.textContent=this.score;
+    this.layerEl.innerHTML=''; this.tiles.clear(); this.byCell.clear();
+    for(const d of s.tiles) this.makeTile(d.r,d.c,d.v,true);
+    this.layoutAll(); return true;
   }
-  moveTileTo(t,nr,nc){
-    this.tilesByCell.delete(key(t.r,t.c));
-    t.r=nr; t.c=nc;
-    this.tilesByCell.set(key(nr,nc), t.id);
+
+  spawn(){
+    const s=this.empty(); if(!s) return false;
+    const [r,c]=s; const v=SPAWN[(Math.random()*SPAWN.length)|0];
+    this.grid[r][c]=v; this.makeTile(r,c,v,false); return true;
+  }
+
+  setVal(t,val){ t.val=val; t.el.className=`tile ${valClass(val)}`; t.el.textContent=val; }
+  moveTo(t,nr,nc){
+    this.byCell.delete(key(t.r,t.c)); t.r=nr; t.c=nc; this.byCell.set(key(nr,nc),t.id);
     const {x,y}=this.geom.pos[nr][nc];
     t.el.style.transform=`translate3d(${x}px,${y}px,0)`;
   }
 
-  /* ---- History (Undo) ---- */
-  pushHistory(){
-    this.history.push({
-      grid: this.grid.map(r=>r.slice()),
-      score: this.score,
-      tiles: [...this.tiles.values()].map(t=>({r:t.r,c:t.c,val:t.val}))
-    });
-    if(this.history.length>20) this.history.shift();
-  }
-  restoreFromHistory(){
-    const s=this.history.pop(); if(!s) return false;
-    this.grid = s.grid.map(r=>r.slice());
-    this.score = s.score; this.scoreEl.textContent=this.score;
-    this.layerEl.innerHTML=''; this.tiles.clear(); this.tilesByCell.clear();
-    for(const d of s.tiles){ this.createTile(d.r,d.c,d.val,true); }
-    this.layoutAll();
-    return true;
-  }
-
-  /* ---- Public API ---- */
-  reset(){
-    this.locked=false;
-    this.grid = Array.from({length:SIZE},()=>Array(SIZE).fill(0));
-    this.score=0; this.scoreEl.textContent=0;
-    this.layerEl.innerHTML=''; this.tiles.clear(); this.tilesByCell.clear(); this.history=[];
-    this.powers={undo:1, shuffle:1, hammer:1, hammerActive:false}; this.updatePowersUI();
-    this.spawn(); this.spawn(); this.layoutAll();
-  }
-
-  spawn(){
-    const s=this.randomEmpty(); if(!s) return false;
-    const [r,c]=s;
-    const v=SPAWN[(Math.random()*SPAWN.length)|0];
-    this.grid[r][c]=v; this.createTile(r,c,v,false);
-    return true;
-  }
-
   slide(dir){
     if(matchLocked || this.locked) return;
-    this.locked = true; setTimeout(()=>{ this.locked=false; }, LOCK);
+    this.locked=true; setTimeout(()=>this.locked=false, LOCK);
 
-    const drc = {
-      left: {dr:0, dc:-1, rows:[0,1,2], cols:[0,1,2]},
-      right:{dr:0, dc:1,  rows:[0,1,2], cols:[2,1,0]},
-      up:   {dr:-1,dc:0,  rows:[0,1,2], cols:[0,1,2]},
-      down: {dr:1, dc:0,  rows:[2,1,0], cols:[0,1,2]},
-    }[dir];
-    if(!drc){ this.locked=false; return; }
+    const drc={
+      left:{dr:0,dc:-1,rows:[0,1,2],cols:[0,1,2]},
+      right:{dr:0,dc:1,rows:[0,1,2],cols:[2,1,0]},
+      up:{dr:-1,dc:0,rows:[0,1,2],cols:[0,1,2]},
+      down:{dr:1,dc:0,rows:[2,1,0],cols:[0,1,2]},
+    }[dir]; if(!drc){this.locked=false;return;}
 
-    this.pushHistory();
+    this.push();
 
     let moved=false;
-    const merged = Array.from({length:SIZE},()=>Array(SIZE).fill(false));
+    const merged=Array.from({length:SIZE},()=>Array(SIZE).fill(false));
 
     for(const r of drc.rows){
       for(const c of drc.cols){
         const v=this.grid[r][c]; if(!v) continue;
-        let nr=r, nc=c;
+        let nr=r,nc=c;
         while(true){
           const rr=nr+drc.dr, cc=nc+drc.dc;
           if(rr<0||rr>=SIZE||cc<0||cc>=SIZE) break;
@@ -424,31 +427,25 @@ class TriGame{
         if(nr===r && nc===c) continue;
         moved=true;
 
-        const moverId=this.tilesByCell.get(key(r,c));
-        const mover=this.tiles.get(moverId);
-
+        const mover=this.tiles.get(this.byCell.get(key(r,c)));
         if(this.grid[nr][nc]===0){
           this.grid[nr][nc]=v; this.grid[r][c]=0;
-          this.moveTileTo(mover,nr,nc);
+          this.moveTo(mover,nr,nc);
         }else if(this.grid[nr][nc]===v && !merged[nr][nc]){
-          const newVal = v*MERGE;
+          const newVal=v*MERGE;
           this.grid[nr][nc]=newVal; this.grid[r][c]=0; merged[nr][nc]=true;
 
-          const targetId=this.tilesByCell.get(key(nr,nc));
-          const target=this.tiles.get(targetId);
-
-          this.moveTileTo(mover,nr,nc);
+          const target=this.tiles.get(this.byCell.get(key(nr,nc)));
+          this.moveTo(mover,nr,nc);
           setTimeout(()=>{
             if(this.tiles.has(mover.id)){ mover.el.remove(); this.tiles.delete(mover.id); }
-            this.tilesByCell.set(key(nr,nc), target.id);
+            this.byCell.set(key(nr,nc),target.id);
             target.el.classList.add('merge');
             setTimeout(()=>target.el.classList.remove('merge'), ANIM);
-            this.setTileValue(target,newVal);
+            this.setVal(target,newVal);
           }, ANIM*0.9);
 
-          // simple scoring: add created value
-          this.score = (this.score||0) + newVal;
-          this.scoreEl.textContent = this.score;
+          this.score=(this.score||0)+newVal; this.scoreEl.textContent=this.score;
         }
       }
     }
@@ -464,21 +461,16 @@ class TriGame{
     }
   }
 
-  isWin(){
-    for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
-      if(this.grid[r][c]===WIN_TILE) return true;
-    }
-    return false;
-  }
+  isWin(){ for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(this.grid[r][c]===WIN_TILE) return true; return false; }
 }
 
-/* ===== Create the two games ===== */
-const g1 = new TriGame('p1','P1');
-const g2 = new TriGame('p2','P2');
+/* Two games */
+const g1=new TriGame('p1','P1');
+const g2=new TriGame('p2','P2');
 
-/* ===== Keyboard controls ===== */
+/* Keyboard */
 document.addEventListener('keydown', e=>{
-  if(matchLocked) return; // blocked during countdown/intro
+  if(matchLocked) return;
   const k=e.key;
   if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(k)){
     e.preventDefault();
@@ -490,70 +482,54 @@ document.addEventListener('keydown', e=>{
   }
 });
 
-/* ===== Global controls ===== */
+/* Header button */
 document.getElementById('playAgain').addEventListener('click', ()=>{
-  g1.reset(); g2.reset(); hideWin();
-  startCountdown(); // fresh countdown for rematch
+  hideWin(); startCountdown(true);
 });
 
-/* ===== Intro overlay (instructions) ===== */
-const intro = document.getElementById('overlay');
-document.getElementById('intro-play').addEventListener('click', ()=>{
-  intro.style.display='none';
-  startCountdown();
-});
-document.getElementById('intro-close').addEventListener('click', ()=>{
-  intro.style.display='none';
-  startCountdown();
-});
+/* Intro overlay + countdown */
+const intro=document.getElementById('overlay');
+const countdown=document.getElementById('countdown');
+const countNum=document.getElementById('countNum');
 
-/* ===== Countdown ===== */
-const countdown = document.getElementById('countdown');
-const countNum = document.getElementById('countNum');
+document.getElementById('intro-play').addEventListener('click', ()=>{ intro.style.display='none'; startCountdown(); });
+document.getElementById('intro-close').addEventListener('click', ()=>{ intro.style.display='none'; startCountdown(); });
 
-function startCountdown(){
-  matchLocked = true;
-  // reset boards so both start fair if the user closed/opened overlays oddly
-  g1.reset(); g2.reset();
+function startCountdown(resetBoards=false){
+  matchLocked=true;
+  if(resetBoards){ g1.reset(); g2.reset(); }
   g1.setEnabled(false); g2.setEnabled(false);
-
-  let seq = ['3','2','1','GO!'];
-  let i=0;
-  countNum.textContent = seq[i];
+  let seq=['3','2','1','GO!'], i=0;
+  countNum.textContent=seq[i];
   countdown.style.display='flex';
-
-  const tick = () => {
+  const tick=()=>{
     i++;
     if(i<seq.length){
-      countNum.textContent = seq[i];
-      countNum.parentElement.style.animation='none';
-      // re-trigger pop animation
-      void countNum.offsetWidth;
+      countNum.textContent=seq[i];
+      countNum.parentElement.style.animation='none'; void countNum.offsetWidth;
       countNum.parentElement.style.animation='pop 240ms ease-out';
-      setTimeout(tick, i===seq.length-1 ? 650 : 650);
+      setTimeout(tick, 650);
     }else{
-      // end
       countdown.style.display='none';
-      matchLocked = false;
-      g1.setEnabled(true); g2.setEnabled(true);
+      matchLocked=false; g1.setEnabled(true); g2.setEnabled(true);
     }
   };
   setTimeout(tick, 650);
 }
 
-/* ===== Win overlay ===== */
+/* Win overlay */
 const winLayer=document.getElementById('win-layer');
 const winTitle=document.getElementById('win-title');
-
 function announceWinner(label){
-  matchLocked = true; // stop further input
-  winTitle.textContent = (label==='P1' ? 'Player 1 wins! 🎉' : 'Player 2 wins! 🎉');
+  matchLocked=true;
+  winTitle.textContent = (label==='P1'?'Player 1 wins! 🎉':'Player 2 wins! 🎉');
   winLayer.style.display='flex';
 }
 function hideWin(){ winLayer.style.display='none'; matchLocked=false; g1.setEnabled(true); g2.setEnabled(true); }
-
-document.getElementById('win-again').addEventListener('click', ()=>{ hideWin(); startCountdown(); });
+document.getElementById('win-again').addEventListener('click', ()=>{ hideWin(); startCountdown(true); });
 document.getElementById('win-close').addEventListener('click', hideWin);
+
+/* Start with instructions visible; countdown starts after closing */
 </script>
 </body>
 </html>
