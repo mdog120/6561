@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>6561🩷</title>
+<title>6561 🩷</title>
 <style>
   :root{
     --bg:#ffeaf1; --board:#f3c2d1; --empty:#f8d7e3; --text:#7a2a4a; --accent:#b14172;
-    --gap:14px; --pad:16px; --cell:120px; /* JS recalculates --cell */
-    --anim:140ms;
+    --gap:14px; --pad:16px; --cell:120px; --gridW:560px; --anim:140ms;
   }
+
   html,body{height:100%}
   body{
     margin:0; background:var(--bg); color:var(--text);
@@ -17,8 +17,21 @@
     display:flex; justify-content:center; align-items:stretch;
     -webkit-tap-highlight-color: transparent;
   }
-  .wrap{ width:min(96vw,740px); margin:22px auto; }
-  header{display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:14px;}
+  .wrap{ width:min(96vw,760px); margin:22px auto; }
+
+  /* Top mode switch */
+  .modebar{
+    display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center; justify-content:flex-start;
+  }
+  .tab{
+    border:none; border-radius:999px; padding:8px 14px; font-weight:800; cursor:pointer;
+    background:#ffd1e0; color:#7a2a4a; text-decoration:none; display:inline-block;
+    box-shadow:0 3px 10px rgba(255,179,201,.28);
+  }
+  .tab.active{ background:#b14172; color:#fff }
+  .tab:focus{ outline:3px solid #b14172; outline-offset:2px }
+
+  header{display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:12px;}
   h1{font-size:46px; line-height:1; margin:0}
   .sub{color:#a53d6b; font-size:13px; margin-top:6px}
 
@@ -34,11 +47,28 @@
   .power[disabled]{opacity:.45; cursor:not-allowed}
   .power.active{outline:3px solid #b14172; outline-offset:2px}
 
-  .board{ position:relative; background:var(--board); border-radius:16px; padding:var(--pad); box-shadow:0 8px 0 rgba(0,0,0,.06) inset; }
-  .grid{ position:relative; width:100%; height:100%; display:grid; grid-template-columns:repeat(4,var(--cell)); grid-template-rows:repeat(4,var(--cell)); gap:var(--gap); }
+  .board{
+    position:relative; background:var(--board); border-radius:16px; padding:var(--pad);
+    box-shadow:0 8px 0 rgba(0,0,0,.06) inset;
+    /* We’ll center the inner grid exactly via inline sizes computed in JS */
+  }
+
+  /* Background cell grid (purely decorative) — sized precisely by JS */
+  .grid{
+    position:relative;
+    width:var(--gridW); height:var(--gridW);
+    display:grid; grid-template-columns:repeat(4,var(--cell)); grid-template-rows:repeat(4,var(--cell)); gap:var(--gap);
+    margin:0 auto; /* center inside board */
+  }
   .cell{ background:var(--empty); border-radius:12px; }
 
-  .layer{ position:absolute; inset:var(--pad); pointer-events:none; }
+  /* Tiles layer — positioned to perfectly overlay the background grid */
+  .layer{
+    position:absolute;
+    width:var(--gridW); height:var(--gridW);
+    pointer-events:none;
+  }
+
   .tile{
     position:absolute; width:var(--cell); height:var(--cell); border-radius:12px;
     display:flex; align-items:center; justify-content:center; font-weight:800; font-size:30px;
@@ -78,10 +108,16 @@
 </head>
 <body>
   <div class="wrap">
+    <!-- Mode switch -->
+    <div class="modebar">
+      <a class="tab active" href="index.html">1 Player</a>
+      <a class="tab" href="multi.html">2 Players</a>
+    </div>
+
     <header>
       <div>
         <h1>6561</h1>
-        <div class="sub">Triple-merge on a <strong>4×4</strong> pink board. Reach <strong>6561</strong> to win — continue in <strong>endless</strong> after!</div>
+        <div class="sub">Triple-merge on a <strong>4×4</strong> pink board. Reach <strong>6561</strong> to win — then continue in <strong>endless</strong>.</div>
       </div>
       <div class="badges">
         <div class="badge"><div class="label">SCORE</div><div class="value" id="score">0</div></div>
@@ -97,19 +133,21 @@
     </div>
 
     <div class="board" id="board">
+      <!-- The background cells (exactly sized to fit) -->
       <div class="grid" id="grid" aria-label="game board">
-        <!-- 16 background cells -->
         <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
         <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
         <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
         <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
       </div>
-      <div class="layer" id="layer"></div>
+      <!-- Tiles layer precisely overlapped -->
+      <div class="layer" id="layer" aria-hidden="true"></div>
     </div>
 
     <div id="toast" class="toast">You reached 6561 — Endless unlocked! 🎉</div>
   </div>
 
+  <!-- Instructions -->
   <div class="overlay" id="overlay">
     <div class="card">
       <button class="close" id="close">&times;</button>
@@ -127,8 +165,8 @@ const SIZE = 4;
 const WIN_TILE = 6561;
 const MERGE_MULTIPLIER = 3;
 const SPAWN_VALUES = [3,3,3,3,3,3,3,3,3,9];
-const ANIM_MS = 160;        // slightly longer = smoother feel
-const INPUT_LOCK_MS = 165;  // block inputs until animation commit
+const ANIM_MS = 150;        // smooth 2048 feel
+const INPUT_LOCK_MS = 155;  // block keys until commit
 
 /* ===== State ===== */
 let grid = [];
@@ -145,39 +183,73 @@ const scoreEl = document.getElementById('score');
 const bestEl  = document.getElementById('best');
 bestEl.textContent = best;
 
-/* Tiles bookkeeping: each tile has a uid; tilesByCell maps "r,c" → uid */
+/* Tiles bookkeeping */
 const tiles = new Map();           // uid → {r,c,val,el}
 const tilesByCell = new Map();     // "r,c" → uid
 const uid = () => Math.random().toString(36).slice(2);
+const key = (r,c)=> `${r},${c}`;
+function at(r,c){ const id = tilesByCell.get(key(r,c)); return id? tiles.get(id): null; }
+function put(tile){ tiles.set(tile.id,tile); tilesByCell.set(key(tile.r,tile.c), tile.id); }
+function delAt(r,c){
+  const id = tilesByCell.get(key(r,c)); if(!id) return;
+  tilesByCell.delete(key(r,c));
+  const t = tiles.get(id); if(!t) return;
+  t.el.remove(); tiles.delete(id);
+}
 
-/* Geometry cache: integer pixel positions for each cell */
-let geom = { pad:16, gap:14, cell:120, pos:[] };
+/* Geometry (exact fit) */
+let geom = { pad:16, gap:14, cell:120, pos:[], offsetLeft:0, offsetTop:0, gridW:560 };
+
 function computeGeom(){
   const pad = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--pad'))||16;
   const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap'))||14;
+
+  // Available inner width inside the board (we let the board fill its container)
   const boardW = boardEl.clientWidth;
   const inner = boardW - pad*2;
+
+  // Compute integer cell size and exact grid width
   const cell = Math.floor((inner - gap*(SIZE-1)) / SIZE);
-  document.documentElement.style.setProperty('--cell', cell+'px');
+  const gridW = cell*SIZE + gap*(SIZE-1);
+  const extra = inner - gridW; // leftover space to center the grid
+
+  // Apply CSS variables and inline sizes so the grid & layer match perfectly
+  document.documentElement.style.setProperty('--cell', cell + 'px');
+  document.documentElement.style.setProperty('--gridW', gridW + 'px');
+
+  gridEl.style.width = gridW + 'px';
+  gridEl.style.height = gridW + 'px';
+  layerEl.style.width = gridW + 'px';
+  layerEl.style.height = gridW + 'px';
+
+  // Center the grid/layer within the board by offsetting from the top-left padding
+  const offsetLeft = pad + Math.floor(extra/2);
+  const offsetTop  = pad + Math.floor(extra/2);
+  layerEl.style.left = offsetLeft + 'px';
+  layerEl.style.top  = offsetTop  + 'px';
 
   const pos = Array.from({length:SIZE}, (_,r)=>Array.from({length:SIZE}, (_,c)=>{
-    const x = pad + (cell+gap)*c;
-    const y = pad + (cell+gap)*r;
-    // snap to integers; use translate3d for GPU
-    return {x:Math.round(x), y:Math.round(y)};
+    const x = Math.round((cell+gap)*c);
+    const y = Math.round((cell+gap)*r);
+    return {x,y};
   }));
-  geom = {pad, gap, cell, pos};
+  geom = { pad, gap, cell, pos, offsetLeft, offsetTop, gridW };
 }
+
 const ro = new ResizeObserver(()=>{ computeGeom(); layoutAll(); });
 ro.observe(boardEl);
 
-/* ===== Power-ups ===== */
+/* Power-ups */
 const POWERS = {
   undo: { uses: 2, btn: document.getElementById('pu-undo') },
   shuffle: { uses: 2, btn: document.getElementById('pu-shuffle') },
   hammer: { uses: 2, btn: document.getElementById('pu-hammer'), active:false },
 };
 let historyStack = [];
+function resetPowers(){
+  POWERS.undo.uses=2; POWERS.shuffle.uses=2; POWERS.hammer.uses=2; POWERS.hammer.active=false;
+  updatePowerButtons();
+}
 function updatePowerButtons(){
   for(const [k,p] of Object.entries(POWERS)){
     p.btn.textContent =
@@ -189,16 +261,7 @@ function updatePowerButtons(){
   }
 }
 
-/* ===== Helpers ===== */
-const key = (r,c)=> `${r},${c}`;
-function at(r,c){ const id = tilesByCell.get(key(r,c)); return id? tiles.get(id): null; }
-function put(tile){ tiles.set(tile.id,tile); tilesByCell.set(key(tile.r,tile.c), tile.id); }
-function delAt(r,c){
-  const id = tilesByCell.get(key(r,c)); if(!id) return;
-  tilesByCell.delete(key(r,c));
-  const t = tiles.get(id); if(!t) return;
-  t.el.remove(); tiles.delete(id);
-}
+/* Core helpers */
 function moveTileTo(t, nr, nc){
   tilesByCell.delete(key(t.r,t.c));
   t.r = nr; t.c = nc;
@@ -212,50 +275,9 @@ function setTileValue(t, val){
   t.el.textContent = val;
 }
 function valueClass(v){ return `v${v}`; }
-
-/* ===== Core ===== */
-function reset(){
-  inputLocked=false;
-  grid = Array.from({length:SIZE},()=>Array(SIZE).fill(0));
-  score = 0; wonAlready=false; endless=false;
-  scoreEl.textContent = score;
-  layerEl.innerHTML=''; tiles.clear(); tilesByCell.clear(); historyStack=[];
-  computeGeom();
-  spawn(); spawn();
-  layoutAll();
-  updatePowerButtons();
-}
-
-function pushHistory(){
-  // Store grid + score + all tiles (value/positions only)
-  const snapshot = {
-    grid: grid.map(row=>row.slice()),
-    score,
-    tiles: [...tiles.values()].map(t=>({r:t.r,c:t.c,val:t.val}))
-  };
-  historyStack.push(snapshot);
-  if(historyStack.length>50) historyStack.shift();
-}
-function restoreFromHistory(){
-  const s = historyStack.pop(); if(!s) return false;
-  grid = s.grid.map(row=>row.slice()); score = s.score; scoreEl.textContent = score;
-  // rebuild tiles
-  layerEl.innerHTML=''; tiles.clear(); tilesByCell.clear();
-  for(const d of s.tiles){ createTileDOM(d.r,d.c,d.val,true); }
-  layoutAll(); return true;
-}
-
 function randomEmpty(){
-  const e=[];
-  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(grid[r][c]===0) e.push([r,c]);
+  const e=[]; for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(!grid[r][c]) e.push([r,c]);
   return e.length? e[(Math.random()*e.length)|0] : null;
-}
-
-function spawn(){
-  const spot = randomEmpty(); if(!spot) return false;
-  const val = SPAWN_VALUES[(Math.random()*SPAWN_VALUES.length)|0];
-  const [r,c] = spot; grid[r][c]=val; createTileDOM(r,c,val,false);
-  return true;
 }
 
 function createTileDOM(r,c,val,noPop){
@@ -281,8 +303,13 @@ function createTileDOM(r,c,val,noPop){
   });
 }
 
+function spawn(){
+  const spot = randomEmpty(); if(!spot) return false;
+  const val = SPAWN_VALUES[(Math.random()*SPAWN_VALUES.length)|0];
+  const [r,c]=spot; grid[r][c]=val; createTileDOM(r,c,val,false); return true;
+}
+
 function layoutAll(){
-  // Re-apply cached positions to all tiles in one frame
   requestAnimationFrame(()=>{
     tiles.forEach(t=>{
       const {x,y} = geom.pos[t.r][t.c];
@@ -296,6 +323,36 @@ function updateScore(delta){
   if(score>best){ best=score; bestEl.textContent = best; localStorage.setItem('best-6561-pink-4x4',best); }
 }
 
+/* History (for Undo) */
+function pushHistory(){
+  historyStack.push({
+    grid: grid.map(r=>r.slice()),
+    score,
+    tiles: [...tiles.values()].map(t=>({r:t.r,c:t.c,val:t.val}))
+  });
+  if(historyStack.length>50) historyStack.shift();
+}
+function restoreFromHistory(){
+  const s = historyStack.pop(); if(!s) return false;
+  grid = s.grid.map(r=>r.slice()); score = s.score; scoreEl.textContent = score;
+  layerEl.innerHTML=''; tiles.clear(); tilesByCell.clear();
+  for(const d of s.tiles){ createTileDOM(d.r,d.c,d.val,true); }
+  layoutAll(); return true;
+}
+
+/* Game core */
+function reset(){
+  inputLocked=false;
+  grid = Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+  score = 0; wonAlready=false; endless=false;
+  scoreEl.textContent = score;
+  layerEl.innerHTML=''; tiles.clear(); tilesByCell.clear(); historyStack=[];
+  resetPowers();
+  computeGeom();
+  spawn(); spawn();
+  layoutAll();
+}
+
 function slide(dir){
   if(inputLocked) return;
   inputLocked = true;
@@ -307,9 +364,9 @@ function slide(dir){
     up:{dr:-1,dc:0, rows:[0,1,2,3], cols:[0,1,2,3]},
     down:{dr:1,dc:0, rows:[3,2,1,0], cols:[0,1,2,3]},
   }[dir];
-  if(!drc){ inputLocked=false; return; }
 
   pushHistory();
+
   let moved=false;
   const merged = Array.from({length:SIZE},()=>Array(SIZE).fill(false));
 
@@ -329,28 +386,21 @@ function slide(dir){
 
       const t = at(r,c);
       if(grid[nr][nc]===0){
-        // move only
         grid[nr][nc]=v; grid[r][c]=0;
         moveTileTo(t,nr,nc);
       }else if(grid[nr][nc]===v && !merged[nr][nc]){
-        // merge
         const newVal = v*MERGE_MULTIPLIER;
         grid[nr][nc]=newVal; grid[r][c]=0; merged[nr][nc]=true;
 
         const target = at(nr,nc);
-        // animate mover into target then remove mover, bump target
         moveTileTo(t,nr,nc);
         setTimeout(()=>{
-          // remove mover record (now duplicate at same cell)
-          if(tiles.has(t.id)){
-            t.el.remove(); tiles.delete(t.id);
-          }
-          // ensure cell mapping keeps the target's uid
+          if(tiles.has(t.id)){ t.el.remove(); tiles.delete(t.id); }
           tilesByCell.set(key(nr,nc), target.id);
           target.el.classList.add('merge');
           setTimeout(()=>target.el.classList.remove('merge'), ANIM_MS);
-          setTileValue(target, newVal);
-        }, ANIM_MS * 0.9);
+          setTileValue(target,newVal);
+        }, ANIM_MS*0.9);
 
         updateScore(newVal);
         if(newVal===WIN_TILE && !wonAlready){
@@ -367,12 +417,10 @@ function slide(dir){
       if(isGameOver()) showGameOver();
     }, ANIM_MS);
   }else{
-    // revert history push if nothing changed
     historyStack.pop();
   }
 }
 
-/* Game over check */
 function isGameOver(){
   for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
     const v=grid[r][c];
@@ -441,13 +489,10 @@ POWERS.undo.btn.addEventListener('click', ()=>{
 POWERS.shuffle.btn.addEventListener('click', ()=>{
   if(POWERS.shuffle.uses<=0 || inputLocked) return;
   pushHistory();
-  // collect tiles
   const vals=[...tiles.values()].map(t=>t.val);
-  // clear everything
   for(const t of [...tiles.values()]) t.el.remove();
   tiles.clear(); tilesByCell.clear();
   grid = Array.from({length:SIZE},()=>Array(SIZE).fill(0));
-  // place back randomly
   for(const v of vals.sort(()=>Math.random()-0.5)){
     const spot = randomEmpty(); if(!spot) break;
     const [r,c]=spot; grid[r][c]=v; createTileDOM(r,c,v,true);
