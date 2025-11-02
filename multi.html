@@ -19,7 +19,6 @@
   }
   .wrap{ width:min(98vw,1080px); margin:22px auto; }
 
-  /* Mode switch (matches index.html) */
   .modebar{display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;}
   .tab{
     border:none; border-radius:999px; padding:8px 14px; font-weight:800; cursor:pointer;
@@ -77,6 +76,18 @@
   .card h2{margin:8px 0}
   .card p{margin:6px 0 10px; color:#444}
   .close{position:absolute; right:10px; top:10px; border:none; background:#eee; border-radius:999px; width:34px; height:34px; font-weight:700; cursor:pointer}
+
+  /* Legends */
+  .legend{font-size:12px; color:#7a2a4a; opacity:.9; margin-top:8px}
+  .legend kbd{background:#ffd1e0; border-radius:6px; padding:2px 6px; font-weight:800; font-family:inherit}
+
+  /* Countdown overlay */
+  #countdown{ position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:6; }
+  #countdown .bubble{
+    width:170px; height:170px; border-radius:999px; background:#fff; display:flex; align-items:center; justify-content:center;
+    font-size:64px; font-weight:900; color:#b14172; box-shadow:0 24px 80px rgba(0,0,0,.25);
+    animation:pop 240ms ease-out;
+  }
 </style>
 </head>
 <body>
@@ -114,6 +125,7 @@
           </div>
           <div class="layer" id="p1-layer"></div>
         </div>
+        <div class="legend">Move with <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> · Use power-up buttons above</div>
       </section>
 
       <!-- Player 2 -->
@@ -135,6 +147,7 @@
           </div>
           <div class="layer" id="p2-layer"></div>
         </div>
+        <div class="legend">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Use power-up buttons above</div>
       </section>
     </div>
   </div>
@@ -155,6 +168,11 @@
     </div>
   </div>
 
+  <!-- Countdown -->
+  <div id="countdown">
+    <div class="bubble" id="countNum">3</div>
+  </div>
+
   <!-- Win card -->
   <div class="overlay" id="win-layer" style="display:none">
     <div class="card">
@@ -171,6 +189,9 @@ const SIZE=3, WIN_TILE=729, MERGE=3;
 const SPAWN=[3,3,3,3,3,3,3,3,3,9]; // 90% 3, 10% 9
 const ANIM=150, LOCK=155;
 
+/* Match-level input lock (disabled until countdown ends) */
+let matchLocked = true;
+
 const uid=()=>Math.random().toString(36).slice(2);
 const valClass=v=>`v${v}`;
 const key=(r,c)=>`${r},${c}`;
@@ -186,7 +207,7 @@ class TriGame{
     this.undoBtn=document.getElementById(`${label.toLowerCase()}-undo`);
     this.shuffleBtn=document.getElementById(`${label.toLowerCase()}-shuffle`);
     this.hammerBtn=document.getElementById(`${label.toLowerCase()}-hammer`);
-    this.boardEl=this.root.querySelector('.board');  // ✅ search inside panel
+    this.boardEl=this.root.querySelector('.board');  // search inside panel
     if(!this.boardEl){ console.error(`[${this.label}] board not found`); return; }
 
     this.pad=16; this.gap=14; this.cell=100;
@@ -201,6 +222,7 @@ class TriGame{
     this.computeGeom();
     new ResizeObserver(()=>{ this.computeGeom(); this.layoutAll(); }).observe(this.boardEl);
     this.reset();
+    this.setEnabled(!matchLocked); // reflect match lock on UI
   }
 
   computeGeom(){
@@ -212,7 +234,6 @@ class TriGame{
     const gridW = cell*SIZE + gap*(SIZE-1);
     const off = Math.floor((inner-gridW)/2);
 
-    // Apply exact pixel sizes/offsets to this player's grid/layer
     [this.gridEl,this.layerEl].forEach(el=>{
       el.style.width = gridW+'px';
       el.style.height= gridW+'px';
@@ -227,19 +248,27 @@ class TriGame{
     this.pad=pad; this.gap=gap; this.cell=cell; this.geom={pos};
   }
 
+  /* ---- Enable/disable inputs & buttons for match lock ---- */
+  setEnabled(on){
+    const disable = (btn, d) => { btn.disabled = d; btn.classList.toggle('active', !d && btn.classList.contains('active')); };
+    disable(this.undoBtn, !on || this.powers.undo<=0);
+    disable(this.shuffleBtn, !on || this.powers.shuffle<=0);
+    disable(this.hammerBtn, !on || this.powers.hammer<=0);
+  }
+
   /* ---- Power-ups ---- */
   bindPowers(){
     const refresh=()=>this.updatePowersUI();
 
     this.undoBtn.addEventListener('click',()=>{
-      if(this.powers.undo<=0 || this.locked) return;
+      if(matchLocked || this.powers.undo<=0 || this.locked) return;
       if(this.restoreFromHistory()){
-        this.powers.undo--; refresh();
+        this.powers.undo--; refresh(); this.setEnabled(true);
       }
     });
 
     this.shuffleBtn.addEventListener('click',()=>{
-      if(this.powers.shuffle<=0 || this.locked) return;
+      if(matchLocked || this.powers.shuffle<=0 || this.locked) return;
       this.pushHistory();
       const vals=[...this.tiles.values()].map(t=>t.val);
       // clear
@@ -251,11 +280,11 @@ class TriGame{
         const [r,c]=s; this.grid[r][c]=v; this.createTile(r,c,v,true);
       }
       this.layoutAll();
-      this.powers.shuffle--; refresh();
+      this.powers.shuffle--; refresh(); this.setEnabled(true);
     });
 
     this.hammerBtn.addEventListener('click',()=>{
-      if(this.powers.hammer<=0) return;
+      if(matchLocked || this.powers.hammer<=0) return;
       this.powers.hammerActive = !this.powers.hammerActive;
       refresh();
     });
@@ -264,8 +293,8 @@ class TriGame{
   updatePowersUI(){
     const set=(btn,label,count,active=false)=>{
       btn.textContent = `${label} (${count})`;
-      btn.disabled = count<=0;
-      btn.classList.toggle('active', active);
+      btn.disabled = matchLocked || count<=0;
+      btn.classList.toggle('active', active && !matchLocked);
     };
     set(this.undoBtn,'↩︎ Undo',this.powers.undo);
     set(this.shuffleBtn,'🔀 Shuffle',this.powers.shuffle);
@@ -292,12 +321,11 @@ class TriGame{
 
     // Hammer: delete on click
     el.addEventListener('click', ()=>{
-      if(this.powers.hammerActive && this.powers.hammer>0 && !this.locked){
-        this.pushHistory();
-        this.grid[r][c]=0; this.deleteAt(r,c);
-        this.powers.hammerActive=false; this.powers.hammer--; this.updatePowersUI();
-        setTimeout(()=>{ this.spawn(); if(this.isWin()) announceWinner(this.label); }, ANIM);
-      }
+      if(matchLocked || this.powers.hammerActive===false || this.powers.hammer<=0 || this.locked) return;
+      this.pushHistory();
+      this.grid[r][c]=0; this.deleteAt(r,c);
+      this.powers.hammerActive=false; this.powers.hammer--; this.updatePowersUI(); this.setEnabled(true);
+      setTimeout(()=>{ this.spawn(); if(this.isWin()) announceWinner(this.label); }, ANIM);
     });
   }
   deleteAt(r,c){
@@ -365,7 +393,7 @@ class TriGame{
   }
 
   slide(dir){
-    if(this.locked) return;
+    if(matchLocked || this.locked) return;
     this.locked = true; setTimeout(()=>{ this.locked=false; }, LOCK);
 
     const drc = {
@@ -408,7 +436,6 @@ class TriGame{
           const targetId=this.tilesByCell.get(key(nr,nc));
           const target=this.tiles.get(targetId);
 
-          // animate mover into target then remove mover, bump target
           this.moveTileTo(mover,nr,nc);
           setTimeout(()=>{
             if(this.tiles.has(mover.id)){ mover.el.remove(); this.tiles.delete(mover.id); }
@@ -418,7 +445,7 @@ class TriGame{
             this.setTileValue(target,newVal);
           }, ANIM*0.9);
 
-          // scoring (optional): add created tile value
+          // simple scoring: add created value
           this.score = (this.score||0) + newVal;
           this.scoreEl.textContent = this.score;
         }
@@ -429,7 +456,7 @@ class TriGame{
       setTimeout(()=>{
         this.spawn();
         this.layoutAll();
-        if(this.isWin()){ announceWinner(this.label); }
+        if(this.isWin()) announceWinner(this.label);
       }, ANIM);
     }else{
       this.history.pop();
@@ -449,9 +476,8 @@ const g1 = new TriGame('p1','P1');
 const g2 = new TriGame('p2','P2');
 
 /* ===== Keyboard controls ===== */
-// P1: Arrow keys
-// P2: WASD
 document.addEventListener('keydown', e=>{
+  if(matchLocked) return; // blocked during countdown/intro
   const k=e.key;
   if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(k)){
     e.preventDefault();
@@ -466,24 +492,66 @@ document.addEventListener('keydown', e=>{
 /* ===== Global controls ===== */
 document.getElementById('playAgain').addEventListener('click', ()=>{
   g1.reset(); g2.reset(); hideWin();
+  startCountdown(); // fresh countdown for rematch
 });
 
 /* ===== Intro overlay (instructions) ===== */
 const intro = document.getElementById('overlay');
-document.getElementById('intro-play').addEventListener('click', ()=> intro.style.display='none');
-document.getElementById('intro-close').addEventListener('click', ()=> intro.style.display='none');
+document.getElementById('intro-play').addEventListener('click', ()=>{
+  intro.style.display='none';
+  startCountdown();
+});
+document.getElementById('intro-close').addEventListener('click', ()=>{
+  intro.style.display='none';
+  startCountdown();
+});
+
+/* ===== Countdown ===== */
+const countdown = document.getElementById('countdown');
+const countNum = document.getElementById('countNum');
+
+function startCountdown(){
+  matchLocked = true;
+  // reset boards so both start fair if the user closed/opened overlays oddly
+  g1.reset(); g2.reset();
+  g1.setEnabled(false); g2.setEnabled(false);
+
+  let seq = ['3','2','1','GO!'];
+  let i=0;
+  countNum.textContent = seq[i];
+  countdown.style.display='flex';
+
+  const tick = () => {
+    i++;
+    if(i<seq.length){
+      countNum.textContent = seq[i];
+      countNum.parentElement.style.animation='none';
+      // re-trigger pop animation
+      void countNum.offsetWidth;
+      countNum.parentElement.style.animation='pop 240ms ease-out';
+      setTimeout(tick, i===seq.length-1 ? 650 : 650);
+    }else{
+      // end
+      countdown.style.display='none';
+      matchLocked = false;
+      g1.setEnabled(true); g2.setEnabled(true);
+    }
+  };
+  setTimeout(tick, 650);
+}
 
 /* ===== Win overlay ===== */
 const winLayer=document.getElementById('win-layer');
 const winTitle=document.getElementById('win-title');
 
 function announceWinner(label){
+  matchLocked = true; // stop further input
   winTitle.textContent = (label==='P1' ? 'Player 1 wins! 🎉' : 'Player 2 wins! 🎉');
   winLayer.style.display='flex';
 }
-function hideWin(){ winLayer.style.display='none'; }
+function hideWin(){ winLayer.style.display='none'; matchLocked=false; g1.setEnabled(true); g2.setEnabled(true); }
 
-document.getElementById('win-again').addEventListener('click', ()=>{ hideWin(); g1.reset(); g2.reset(); });
+document.getElementById('win-again').addEventListener('click', ()=>{ hideWin(); startCountdown(); });
 document.getElementById('win-close').addEventListener('click', hideWin);
 </script>
 </body>
