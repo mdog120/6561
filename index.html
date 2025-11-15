@@ -291,12 +291,15 @@ function createTileDOM(r,c,val,noPop){
   el.className = `tile ${noPop?'':'new'} ${valueClass(val)}`;
   el.textContent = val;
   const {x,y} = geom.pos[r][c];
-  el.style.transform = `translate3d(${x}px,${y}px,0)`;
+ 
   el.style.opacity = 0;
+  el.style.transform = `translate3d(${x}px,${y}px,0)`;
+  console.log("Element added!");
   layerEl.appendChild(el);
-  //requestAnimationFrame(()=> {
-    //el.style.opacity = 1;
-  //});
+  requestAnimationFrame(()=> {
+    console.log("Animation frame!");
+    el.style.opacity = 1;
+  });
   const t = { id, r, c, val, el };
   put(t);
 
