@@ -307,7 +307,7 @@ function createTileDOM(r,c,val,noPop){
   el.addEventListener('click', ()=>{
     if(POWERS.hammer.active && POWERS.hammer.uses>0 && !inputLocked){
       pushHistory();
-      grid[r][c]=0; delAt(r,c);
+      grid[t.r][t.c]=0; delAt(t.r,t.c);
       POWERS.hammer.active=false; POWERS.hammer.uses--; updatePowerButtons();
       setTimeout(()=>{ spawn(); if(isGameOver()) showGameOver(); }, ANIM_MS);
     }
