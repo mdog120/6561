@@ -206,11 +206,9 @@ function delAt(r,c){
 
 /* Geometry (exact fit) */
 let geom = { pad:16, gap:14, cell:120, pos:[], offsetLeft:0, offsetTop:0, gridW:560 };
-
+const pad = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--pad'))||16;
+const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap'))||14;
 function computeGeom(){
-  const pad = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--pad'))||16;
-  const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap'))||14;
-
   // Available inner width inside the board (we let the board fill its container)
   const boardW = boardEl.clientWidth;
   const inner = boardW - pad*2;
