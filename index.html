@@ -81,8 +81,8 @@
     box-shadow:0 10px 24px rgba(0,0,0,.08);
     user-select:none; pointer-events:auto;
   }
-  .tile.new{animation:pop 140ms ease-out}
-  .tile.merge{animation:bump 140ms ease-out}
+  .tile.new .inner { animation: pop 140ms ease-out; }
+  .tile.merge .inner { animation: bump 140ms ease-out; }
   @keyframes pop{from{transform:scale(.6)} to{transform:scale(1)}}
   @keyframes bump{0%{transform:scale(1)}60%{transform:scale(1.08)}100%{transform:scale(1)}}
 
